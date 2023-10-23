@@ -1,5 +1,4 @@
-from solutions.my_drone_random import MyDroneRandom
+from solutions.my_drone_custom import MyDroneCustom
 
-
-class MyDroneEval(MyDroneRandom):
+class MyDroneEval(MyDroneCustom):
     pass
