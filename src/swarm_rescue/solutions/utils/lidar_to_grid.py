@@ -6,6 +6,7 @@ To move the drone, you have to click on the map, then use the arrows on the keyb
 import os
 import sys
 from typing import Type
+import random
 
 import cv2
 import numpy as np
@@ -121,10 +122,15 @@ class MapMappingExemple(MapAbstract):
         self._size_area = (700, 500)
 
         self._rescue_center = RescueCenter(size=(100, 50))
-        self._rescue_center_pos = ((440, 315), 0)
+        self._rescue_center_pos = ((300, 225), 0)
 
-        self._number_drones = 1
+        self._number_drones = 3
         self._drones_pos = [((-50, 0), 0)]
+        for i in range(self._number_drones):
+            pos = ((-50,
+                    random.uniform(-70, 70)),
+                   0)
+            self._drones_pos.append(pos)
         self._drones = []
 
     def construct_playground(self, drone_type: Type[DroneAbstract]) -> Playground:
