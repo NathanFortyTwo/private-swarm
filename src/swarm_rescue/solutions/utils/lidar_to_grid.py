@@ -108,7 +108,26 @@ class OccupancyGrid(Grid):
         # compute zoomed grid for displaying
         self.zoomed_grid = self.grid.copy()
         new_zoomed_size = (int(self.size_area_world[1] * 0.5), int(self.size_area_world[0] * 0.5))
-        self.zoomed_grid = cv2.resize(self.zoomed_grid, new_zoomed_size, interpolation=cv2.INTER_NEAREST)
+        self.zoomed_grid = cv2.resize(self.zoomed_grid, new_zoomed_size, interpolation=cv2.INTER_AREA)
+
+    @property
+    def get_resolution(self):
+        return self.resolution
+
+    @property
+    def get_index_obstacles(self):
+        ox = []
+        oy = []
+        for i in range(len(self.grid)):
+            for j in range(len(self.grid[i])):
+                if self.grid[i][j] != -40:
+                    new_i, new_j = self.Astar_to_grid_index(i, j)
+                    ox.append(new_i)
+                    oy.append(new_j)
+        return ox, oy
+
+    def Astar_to_grid_index(self, i, j):
+        return i, len(self.grid[i]) - j
 
 
 # The following represents an exemple of Grid usage
@@ -124,7 +143,7 @@ class MapMappingExemple(MapAbstract):
         self._rescue_center = RescueCenter(size=(100, 50))
         self._rescue_center_pos = ((300, 225), 0)
 
-        self._number_drones = 3
+        self._number_drones = 1
         self._drones_pos = [((-50, 0), 0)]
         for i in range(self._number_drones):
             pos = ((-50,
