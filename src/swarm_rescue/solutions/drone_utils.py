@@ -4,7 +4,7 @@ import numpy as np
 import heapq
 
 states_enum = Enum('States', ["INIT", "GOTO_TARGET", "EXPLORE"]) 
-zone_types = Enum('ZoneTypes', ["FREE", "UNKNOWN", "WALL", "RESCUE", "BASE","NO_COMM","NO_GPS","DANGER"])
+zone_types = Enum('ZoneTypes', ["UNKNOWN", "FREE", "WALL", "RESCUE", "BASE","NO_COMM","NO_GPS","DANGER"])
 zone_cost = {zone_types.UNKNOWN.value:2,zone_types.FREE.value:1,zone_types.WALL.value:100,zone_types.RESCUE.value:1,zone_types.BASE.value:1,zone_types.NO_COMM.value:20,zone_types.NO_GPS.value:20,zone_types.DANGER.value:100}
 def coords_to_indexes(coords, gpsbounds,matrix_size):
     """
@@ -51,7 +51,7 @@ def heuristic(x1, y1, x2, y2):
 
 # Check if the given coordinates are valid (inside matrix and not a wall)
 def is_valid(matrix, x, y):
-    return 0 <= x < len(matrix) and 0 <= y < len(matrix[0]) and matrix[x][y] == zone_types.FREE.value
+    return 0 <= x < len(matrix) and 0 <= y < len(matrix[0]) and (matrix[x][y] in [zone_types.FREE.value,zone_types.UNKNOWN.value]) 
 
 def cost(matrix, x, y):
     value = int(matrix[x][y])
