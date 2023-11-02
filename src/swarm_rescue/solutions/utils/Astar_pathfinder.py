@@ -5,8 +5,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-from lidar_to_grid import OccupancyGrid
-
+# from lidar_to_grid import OccupancyGrid # activate only for the exemple
 
 # This line add, to sys.path, the path to parent path of this file
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -18,16 +17,12 @@ from maps.map_intermediate_01 import MyMapIntermediate01
 
 
 
-show_animation = True
+# show_animation = True
 
-if show_animation:
-    fig, ax = plt.subplots()
 
 class AStarPlanner:
 
-
-
-    def __init__(self, ox, oy, resolution):
+    def __init__(self, ox, oy, resolution, show_animation):
         """
         Initialize grid map for a star planning
 
@@ -37,9 +32,10 @@ class AStarPlanner:
         dr: drone radius[m]
         """
 
-        self.resolution = resolution
+        self.show_animation = show_animation # True or false
+        self.resolution = resolution * 0.23
         # drone radius is about 10 pixels but 1/2 of the grid_obstacle_width (with a margin)
-        self.radius = 0.5
+        self.radius = 2.25
         # Calculated in calc_obstacle_map
         self.min_x, self.min_y = 0, 0
         self.max_x, self.max_y = 0, 0
@@ -98,8 +94,8 @@ class AStarPlanner:
             current = open_set[c_id]
 
             # show graph
-            if show_animation:  # pragma: no cover
-                ax.plot(self.calc_grid_position(current.x, self.min_x),
+            if self.show_animation:  # pragma: no cover
+                plt.plot(self.calc_grid_position(current.x, self.min_x),
                          self.calc_grid_position(current.y, self.min_y), "xc")
                 # for stopping simulation with the esc key.
                 plt.gcf().canvas.mpl_connect('key_release_event',
@@ -172,11 +168,11 @@ class AStarPlanner:
         :param min_position:
         :return:
         """
-        pos = index * (self.resolution*0.2) + min_position
+        pos = index * self.resolution + min_position # ajout round
         return pos
 
     def calc_xy_index(self, position, min_pos):
-        return round((position - min_pos) / (self.resolution*0.2))
+        return round((position - min_pos) / self.resolution) # ajout round
 
     def calc_grid_index(self, node):
         return (node.y - self.min_y) * self.x_width + (node.x - self.min_x)
@@ -206,15 +202,17 @@ class AStarPlanner:
         self.min_y = round(min(oy))
         self.max_x = round(max(ox))
         self.max_y = round(max(oy))
-        print("min_x:", self.min_x)
-        print("min_y:", self.min_y)
-        print("max_x:", self.max_x)
-        print("max_y:", self.max_y)
 
-        self.x_width = round((self.max_x - self.min_x) / (self.resolution*0.2))
-        self.y_width = round((self.max_y - self.min_y) / (self.resolution*0.2))
-        print("x_width:", self.x_width)
-        print("y_width:", self.y_width)
+        #print("min_x:", self.min_x)
+        #print("min_y:", self.min_y)
+        #print("max_x:", self.max_x)
+        #print("max_y:", self.max_y)
+
+
+        self.x_width = round((self.max_x - self.min_x) / self.resolution)
+        self.y_width = round((self.max_y - self.min_y) / self.resolution)
+        #print("x_width:", self.x_width)
+        #print("y_width:", self.y_width)
 
         # obstacle map generation
         self.obstacle_map = [[False for _ in range(self.y_width)]
@@ -244,9 +242,16 @@ class AStarPlanner:
 
         return motion
 
+
+
+
+show_animation = False
+
 class MyDronePathFinderExemple(DroneAbstract):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        self.pose_init = None
 
         self.iteration: int = 0
 
@@ -272,14 +277,17 @@ class MyDronePathFinderExemple(DroneAbstract):
                    "rotation": 0.0,
                    "grasper": 0}
 
+        if self.pose_init is None:
+            self.pose_init = self.measured_gps_position()
+
         # increment the iteration counter
         self.iteration += 1
 
-        # self.estimated_pose = Pose(np.asarray(self.measured_gps_position()), self.measured_compass_angle())
-        self.estimated_pose = Pose(np.asarray(self.true_position()), self.true_angle())
+        self.estimated_pose = Pose(np.asarray(self.measured_gps_position()), self.measured_compass_angle())
+        # self.estimated_pose = Pose(np.asarray(self.true_position()), self.true_angle()) # for debug
 
         self.grid.update_grid(pose=self.estimated_pose)
-        if self.iteration % 5 == 0:
+        if self.iteration % 5 == 0 and show_animation:
             self.grid.display(self.grid.grid, self.estimated_pose, title="occupancy grid")
             self.grid.display(self.grid.zoomed_grid, self.estimated_pose, title="zoomed occupancy grid")
             # pass
@@ -289,28 +297,28 @@ class MyDronePathFinderExemple(DroneAbstract):
             ox, oy = self.grid.get_index_obstacles
 
             sx, sy = self.grid._conv_world_to_grid(self.estimated_pose.position[0], self.estimated_pose.position[1])
-            gx, gy = self.grid._conv_world_to_grid(295, 118)
+            gx, gy = self.grid._conv_world_to_grid(self.pose_init[0], self.pose_init[1])
 
              # maj from grid to A*
             sx, sy = self.grid.Astar_to_grid_index(sx, sy)
             gx, gy = self.grid.Astar_to_grid_index(gx, gy)
 
             if show_animation:  # pragma: no cover
-                ax.plot(ox, oy, ".k")
-                ax.plot(sx, sy, "og")
-                ax.plot(gx, gy, "xb")
-                ax.grid(True)
-                ax.axis("equal")
+                plt.plot(ox, oy, ".k")
+                plt.plot(sx, sy, "og")
+                plt.plot(gx, gy, "xb")
+                plt.grid(True)
+                plt.axis("equal")
 
-            planner = AStarPlanner(ox, oy, self.grid.get_resolution)
+            planner = AStarPlanner(ox, oy, self.grid.get_resolution, show_animation)
             rx, ry = planner.planning(sx, sy, gx, gy)
+            print(rx, ry)
 
             if show_animation:  # pragma: no cover
-                ax.plot(rx, ry, "-r")
+                plt.plot(rx, ry, "-r")
                 plt.pause(0.001)
                 plt.show()
 
-            return
 
         return command
 

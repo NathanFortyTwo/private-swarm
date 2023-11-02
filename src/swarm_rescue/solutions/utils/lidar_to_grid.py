@@ -32,6 +32,7 @@ from spg_overlay.gui_map.map_abstract import MapAbstract
 
 from solutions.maps_test.map_lidar_to_grid import add_walls
 
+display_grid = True
 
 class OccupancyGrid(Grid):
     """Simple occupancy grid"""
@@ -120,7 +121,7 @@ class OccupancyGrid(Grid):
         oy = []
         for i in range(len(self.grid)):
             for j in range(len(self.grid[i])):
-                if self.grid[i][j] != -40:
+                if not -40 <= self.grid[i][j] < -1:
                     new_i, new_j = self.Astar_to_grid_index(i, j)
                     ox.append(new_i)
                     oy.append(new_j)
@@ -210,7 +211,7 @@ class MyDroneMappingExemple(DroneAbstract):
         # self.estimated_pose = Pose(np.asarray(self.true_position()), self.true_angle())
 
         self.grid.update_grid(pose=self.estimated_pose)
-        if self.iteration % 5 == 0:
+        if self.iteration % 5 == 0 and display_grid:
             self.grid.display(self.grid.grid, self.estimated_pose, title="occupancy grid")
             self.grid.display(self.grid.zoomed_grid, self.estimated_pose, title="zoomed occupancy grid")
             # pass
