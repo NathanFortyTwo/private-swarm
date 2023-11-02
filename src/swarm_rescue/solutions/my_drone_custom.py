@@ -166,19 +166,6 @@ class MyDroneCustom(DroneAbstract):
         return found_wounded, found_rescue_center, command
 
     def control(self):
-
-        # counter increase if the drone is blocked
-        # grid_estimated_position_x, grid_estimated_position_y = self.grid._conv_world_to_grid(self.estimated_pose.position[0], self.estimated_pose.position[1])
-        # grid_true_position_x, grid_true_position_y = self.grid._conv_world_to_grid(self.true_position()[0], self.true_position()[1])
-        # if self.grid._conv_world_to_grid(self.estimated_pose.position[0], self.estimated_pose.position[1])  != self.grid._conv_world_to_grid(self.true_position()[0], self.true_position()[1]):
-        # if abs(grid_estimated_position_x - grid_true_position_x) < 2 and abs(grid_estimated_position_y - grid_true_position_y) < 2:
-        #    self.counter_position += 1
-        # if normalize_angle(self.estimated_pose.orientation - self.true_angle()) < self.epsilon_angle and self.counter_position > self.limit_time_blocked:
-        #    self.counter_angle += 1
-        # else:
-        #   self.counter_position = 0
-        #   self.counter_angle = 0
-
         #############
         # GRIDMAP + POSE UPDATE
         #############
@@ -370,49 +357,6 @@ class MyDroneCustom(DroneAbstract):
         else:
             return command_straight
 
-    def control_exploring(self):
-        """
-        The Drone will move forward and turn for a random angle when an obstacle is hit
-        The Drone has also an occupancy grid to determine walls and empty spaces positions in the world
-        """
-
-        command_straight = {"forward": 0.7,
-                            "lateral": 0.0,
-                            "rotation": 0.0,
-                            "grasper": 0}
-
-        command_turn = {"forward": 0.0,
-                        "lateral": 0.0,
-                        "rotation": 0.7,
-                        "grasper": 0}
-
-        #############
-        # PROCESS EXPLORING
-        #############
-
-        collided = self.process_lidar_sensor()
-
-        self.counterStraight += 1
-
-        if collided and not self.isTurning and self.counterStraight > self.distStopStraight:
-            self.isTurning = True
-            self.angleStopTurning = random.uniform(-math.pi, math.pi)
-
-        measured_angle = 0
-        if self.measured_compass_angle() is not None:
-            measured_angle = self.measured_compass_angle()
-
-        diff_angle = normalize_angle(self.angleStopTurning - measured_angle)
-        if self.isTurning and abs(diff_angle) < 0.2:
-            self.isTurning = False
-            self.counterStraight = 0
-            self.distStopStraight = random.uniform(10, 50)
-
-        if self.isTurning:
-            return command_turn
-        else:
-            return command_straight
-
     def control_to_base(self):
 
         command_base = {"forward": 0.0,
@@ -573,56 +517,8 @@ class MyDroneCustom(DroneAbstract):
                 command["forward"] = -math.cos(angle)
                 command["lateral"] = math.sin(angle)
 
-        """
-            if j < target_j:
-                command["forward"] = -math.sin(angle)
-                command["lateral"] = -math.cos(angle)
-
-            elif j > target_j:
-                command["forward"] = math.sin(angle)
-                command["lateral"] = math.cos(angle)
-
-            elif i < target_i :
-                command["forward"] = math.cos(angle)
-                command["lateral"] = -math.sin(angle)
-
-            elif i > target_i:
-                command["forward"] = -math.cos(angle)
-                command["lateral"] = math.sin(angle)
-            """
-
         command = self.coeff_value_command(target_i, target_j, i, j, command)
         return command
-
-
-
-    """
-    def adjust_angle(self, angle, command):
-        
-        if self.counter_angle <= self.limit_time_angle_blocked:
-            diff_angle_1 = normalize_angle(self.current_angle + math.pi/2 - angle)
-            if abs(diff_angle_1) < self.epsilon_angle:
-                self.current_angle = self.current_angle + math.pi/2
-                return None
-            elif diff_angle_1 > 0:
-                command["rotation"] = 0.4
-                return command
-            else:
-                command["rotation"] = -0.4
-                return command
-
-        else:
-            diff_angle_2 = normalize_angle(self.current_angle - math.pi/2 - angle)
-            if abs(diff_angle_2) < self.epsilon_angle:
-                self.current_angle = self.current_angle - math.pi / 2
-                return None
-            elif diff_angle_2 > 0:
-                command["rotation"] = 0.7
-                return command
-            else:
-                command["rotation"] = -0.7
-                return command
-        """
 
     @staticmethod
     def command_proportional(value):
