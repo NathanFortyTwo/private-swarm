@@ -429,9 +429,9 @@ class MyDroneCustom(DroneAbstract):
             #self.counter_angle = 0
             return self.move_to_next_point_in_path(x_path, y_path, command, position, angle)  # on rappelle la fonction
         else:  # sinon on se déplace en ligne droite
-            """
             if not self.transition:
                 self.counter_position += 1
+            """
             if self.counter_position == self.limit_time_position_blocked:
                 self.current_angle = self.estimated_pose.orientation
                 # print(rad2deg(self.current_angle))
