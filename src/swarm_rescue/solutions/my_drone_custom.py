@@ -442,9 +442,9 @@ class MyDroneCustom(DroneAbstract):
     def move_to(self, target_i, target_j, command, position, angle):
         # va a la prochaine case en ligne droite, normalement le chemin est sans obstacle
         i, j = self.grid._conv_world_to_grid(position[0], position[1])
-        if self.iteration % 5 == 0:
-            print(
-                f"counter_position={self.counter_position}, angle={rad2deg(angle)}, current_angle={rad2deg(normalize_angle(self.current_angle))}")
+        #if self.iteration % 5 == 0:
+        #    print(
+        #        f"counter_position={self.counter_position}, angle={rad2deg(angle)}, current_angle={rad2deg(normalize_angle(self.current_angle))}")
 
 
         if self.counter_position >= self.limit_time_position_blocked:
@@ -461,7 +461,7 @@ class MyDroneCustom(DroneAbstract):
                 self.counter_position = 0
                 #self.counter_angle = 0
                 self.transition = False
-                print("transition terminée!")
+                #print("transition terminée!")
                 return self.move_to(target_i, target_j, command, position, angle)
             """
             else:

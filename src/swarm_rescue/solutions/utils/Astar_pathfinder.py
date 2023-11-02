@@ -81,7 +81,7 @@ class AStarPlanner:
         open_set[self.calc_grid_index(start_node)] = start_node
 
         while True:
-            if len(open_set) == 0:
+            if len(open_set) == 0 and show_animation:
                 print("Open set is empty..")
                 break
 
@@ -105,7 +105,8 @@ class AStarPlanner:
                     plt.pause(0.001)
 
             if current.x == goal_node.x and current.y == goal_node.y:
-                print("Find goal")
+                if show_animation:
+                    print("Find goal")
                 goal_node.parent_index = current.parent_index
                 goal_node.cost = current.cost
                 break
