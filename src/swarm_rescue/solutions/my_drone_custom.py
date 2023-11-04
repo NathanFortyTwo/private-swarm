@@ -19,8 +19,10 @@ from spg_overlay.utils.utils import circular_mean, clamp
 from solutions.utils.lidar_to_grid import OccupancyGrid
 from solutions.utils.Astar_pathfinder import AStarPlanner
 
-show_animation = False
+show_animation = True
 
+# Grid resolution
+RESOLUTION = 8
 
 class MyDroneCustom(DroneAbstract):
     def __init__(self,
@@ -31,12 +33,13 @@ class MyDroneCustom(DroneAbstract):
                          misc_data=misc_data,
                          display_lidar_graph=False,
                          **kwargs)
+        # base parameters
         self.counterStraight = 0
-        self.angleStopTurning = random.uniform(-math.pi, math.pi)
-        self.distStopStraight = random.uniform(10, 50)
-        self.isTurning = True
         self.pose_init = None
         self.epsilon_angle = 0.2
+        self.number_drones = 1
+        if misc_data:
+            self.number_drones = misc_data.number_drones
 
         # custom control
         self.collided_nums = 0
@@ -50,19 +53,18 @@ class MyDroneCustom(DroneAbstract):
         # Drone position
         self.estimated_pose = Pose()
         self.counter_position = 0
-        #self.counter_angle = 0
+        # self.counter_angle = 0
 
-        # Grid resolution (to determine)
-        resolution = 8
+        # Gridmap
         self.grid = OccupancyGrid(size_area_world=self.size_area,
-                                  resolution=resolution,
+                                  resolution=RESOLUTION,
                                   lidar=self.lidar())
 
         # path A*
         self.path = None
         self.current_angle = None
         self.limit_time_position_blocked = 70
-        #self.limit_time_angle_blocked = 20
+        # self.limit_time_angle_blocked = 20
         self.transition = False
 
         # PD controller
@@ -80,9 +82,12 @@ class MyDroneCustom(DroneAbstract):
 
     def define_message_for_all(self):
         """
-        We must transmit our gridmap to the other drones
+        We must transmit our gridmap to the other drones, know if the drones around have already taken an entity,
+        free space around drones positions
         """
-        pass
+        if (self.iteration + self.identifier) % self.number_drones == 0:
+            msg_data = (self.identifier, self.grid.grid, self.estimated_pose, self.grasped_entities(), self.state)
+            return msg_data
 
     def process_lidar_sensor(self):
         """
@@ -99,11 +104,39 @@ class MyDroneCustom(DroneAbstract):
 
         return collided
 
+    def process_communication_sensor(self):
+        """
+        Returns True if wounded entity has already been grasped, update the gridmap
+        """
+        is_grasped = False
+        if self.communicator:
+            received_messages = self.communicator.received_messages
+            for msg in received_messages:
+                message = msg[1]
+                if message[3]:
+                    is_grasped = True
+                # gridmap update + avoid considering drones as obstacles
+
+                zeros_indices = np.argwhere(self.grid.grid == 0)
+
+                for index in zeros_indices:
+                    if self.grid.grid[index[0]][index[1]] == 0 and message[1][index[0]][index[1]] != 0:
+                            self.grid.grid[index[0]][index[1]] = message[1][index[0]][index[1]]
+                print(message)
+
+                i, j = self.grid._conv_world_to_grid(message[2].position[0], message[2].position[1])
+                for k in range(i-1, i+2):
+                    for l in range(j-1, j+2):
+                        if 0 <= k < len(self.grid.grid) and 0 <= l < len(self.grid.grid[0]):
+                            self.grid.grid[k][l] = -40
+                return is_grasped
+
+
     def process_semantic_sensor(self):
         """
         According to his state in the state machine, the Drone will move towards a wound person or the rescue center
         """
-        command = {"forward": 0.5,
+        command = {"forward": 1,
                    "lateral": 0.0,
                    "rotation": 0.0}
         angular_vel_controller_max = 1.0
@@ -115,10 +148,11 @@ class MyDroneCustom(DroneAbstract):
         if (self.state is self.Activity.EXPLORING
             or self.state is self.Activity.GRASPING_WOUNDED) \
                 and detection_semantic is not None:
+            already_grasped = self.process_communication_sensor()
             scores = []
             for data in detection_semantic:
                 # If the wounded person detected is held by nobody
-                if data.entity_type == DroneSemanticSensor.TypeEntity.WOUNDED_PERSON and not data.grasped:
+                if data.entity_type == DroneSemanticSensor.TypeEntity.WOUNDED_PERSON and not data.grasped and not already_grasped:
                     found_wounded = True
                     v = (data.angle * data.angle) + \
                         (data.distance * data.distance / 10 ** 5)
@@ -157,7 +191,7 @@ class MyDroneCustom(DroneAbstract):
 
             # reduce speed if we need to turn a lot
             if abs(a) == 1:
-                command["forward"] = 0.2
+                command["forward"] = 0.6
 
         if found_rescue_center and is_near:
             command["forward"] = 0
@@ -178,7 +212,7 @@ class MyDroneCustom(DroneAbstract):
         self.estimated_pose = Pose(np.asarray(self.true_position()), self.true_angle())  # only for debugging
 
         self.grid.update_grid(pose=self.estimated_pose)
-        if self.iteration % 5 == 0 and show_animation:
+        if self.iteration % 5 == 0 and show_animation and self.identifier == 6:
             self.grid.display(self.grid.grid, self.estimated_pose, title="occupancy grid")
             self.grid.display(self.grid.zoomed_grid, self.estimated_pose, title="zoomed occupancy grid")
             # pass
@@ -225,8 +259,10 @@ class MyDroneCustom(DroneAbstract):
 
         ##########
         # COMMANDS FOR EACH STATE
-        # Searching randomly, but when a rescue center or wounded person is detected, we use a special command
+        # Searching using control_custom(), but when a rescue center
+        # or wounded person is detected, we use a special command
         ##########
+
         if self.state is self.Activity.EXPLORING:
             command = self.control_custom()
             command["grasper"] = 0
@@ -375,19 +411,19 @@ class MyDroneCustom(DroneAbstract):
             sx, sy = self.grid.Astar_to_grid_index(sx, sy)
             gx, gy = self.grid.Astar_to_grid_index(gx, gy)
 
-            if show_animation:  # pragma: no cover
+            if show_animation and self.identifier == 6:  # pragma: no cover
                 plt.plot(ox, oy, ".k")
                 plt.plot(sx, sy, "og")
                 plt.plot(gx, gy, "xb")
                 plt.grid(True)
                 plt.axis("equal")
 
-            planner = AStarPlanner(ox, oy, self.grid.get_resolution, show_animation)
+            planner = AStarPlanner(ox, oy, self.grid.get_resolution, show_animation, self.identifier)
             rx, ry = planner.planning(sx, sy, gx, gy)
 
-            if show_animation:  # pragma: no cover
+            if show_animation and self.identifier == 6:  # pragma: no cover
                 plt.plot(rx, ry, "-r")
-                plt.pause(0.3)
+                plt.pause(0.05)
 
             # from float to int coordinates
             int_rx = [round(x) for x in rx]

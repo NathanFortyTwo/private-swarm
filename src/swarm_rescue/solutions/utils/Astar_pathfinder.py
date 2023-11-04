@@ -22,7 +22,7 @@ from maps.map_intermediate_01 import MyMapIntermediate01
 
 class AStarPlanner:
 
-    def __init__(self, ox, oy, resolution, show_animation):
+    def __init__(self, ox, oy, resolution, show_animation, identifier):
         """
         Initialize grid map for a star planning
 
@@ -31,7 +31,7 @@ class AStarPlanner:
         resolution: grid resolution [m]
         dr: drone radius[m]
         """
-
+        self.identifier = identifier
         self.show_animation = show_animation # True or false
         self.resolution = resolution * 0.23
         # drone radius is about 10 pixels but 1/2 of the grid_obstacle_width (with a margin)
@@ -94,7 +94,7 @@ class AStarPlanner:
             current = open_set[c_id]
 
             # show graph
-            if self.show_animation:  # pragma: no cover
+            if self.show_animation and self.identifier == 6:  # pragma: no cover
                 plt.plot(self.calc_grid_position(current.x, self.min_x),
                          self.calc_grid_position(current.y, self.min_y), "xc")
                 # for stopping simulation with the esc key.
@@ -105,7 +105,7 @@ class AStarPlanner:
                     plt.pause(0.001)
 
             if current.x == goal_node.x and current.y == goal_node.y:
-                if show_animation:
+                if show_animation and self.identifier == 0:
                     print("Find goal")
                 goal_node.parent_index = current.parent_index
                 goal_node.cost = current.cost
