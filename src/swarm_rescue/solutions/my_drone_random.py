@@ -5,6 +5,10 @@ The Drone will move forward and turn for a random angle when an obstacle is hit
 import math
 import random
 from typing import Optional
+import sys
+import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from spg_overlay.entities.drone_abstract import DroneAbstract
 from spg_overlay.utils.misc_data import MiscData
@@ -50,6 +54,7 @@ class MyDroneRandom(DroneAbstract):
         """
         The Drone will move forward and turn for a random angle when an obstacle is hit
         """
+
         command_straight = {"forward": 1.0,
                             "lateral": 0.0,
                             "rotation": 0.0,
