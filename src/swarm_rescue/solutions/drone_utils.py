@@ -51,7 +51,7 @@ def heuristic(x1, y1, x2, y2):
 
 # Check if the given coordinates are valid (inside matrix and not a wall)
 def is_valid(matrix, x, y):
-    return 0 <= x < len(matrix) and 0 <= y < len(matrix[0]) and (matrix[x][y] in [zone_types.FREE.value,zone_types.UNKNOWN.value]) 
+    return 0 <= x < len(matrix) and 0 <= y < len(matrix[0]) and (matrix[x][y] not in [zone_types.WALL.value]) 
 
 def cost(matrix, x, y):
     value = int(matrix[x][y])

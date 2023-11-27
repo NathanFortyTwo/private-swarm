@@ -11,6 +11,8 @@ from spg_overlay.entities.drone_distance_sensors import DroneSemanticSensor
 """
 Les méthodes qui ne sont PAS appellée par control() sont préfacées par un _
 """
+
+
 class MyCustomDrone(DroneAbstract):
     def __init__(self,
                  identifier: Optional[int] = None,
@@ -36,14 +38,15 @@ class MyCustomDrone(DroneAbstract):
         self.path = None
         self.epsilon_angle = 5
         self.DIST_SEUIL_LIDAR = 150
-        
         self.x = None
         self.y = None
         self.i = None
         self.j = None
         self.theta = None
         self.target = None
-
+        self.rescue = None
+        self.ANGULAR_VELOCITY = 0.171743
+        self.move_angle = None
         print("MAP_SIZE : ",self.MAP_SIZE)
         print("GPS_BOUNDS : ",self.GPS_BOUNDS)
         print("number_drones : ",misc_data.number_drones)
@@ -78,35 +81,36 @@ class MyCustomDrone(DroneAbstract):
             self.map[i,j] = du.zone_types.FREE.value
         
         self.update_map_with_lidar()
+        self.update_map_with_semantic()
+
+    def update_map_with_semantic(self):
+        data = self._process_semantic()
+        for (entity_type,coord) in data:
+            i,j = coord
+            if entity_type == DroneSemanticSensor.TypeEntity.RESCUE_CENTER:
+                self.map[i,j] = du.zone_types.BASE.value
 
     def get_base_path(self):
         coords = du.find_on_map(self.map,du.zone_types.BASE.value)
-        if len(coords)==0:
-            return None # c'est pas censé arriver
-         
+        assert len(coords) > 0
         i,j = self.i,self.j
-
-         # une seule base donc on peut prendre le premier
+        # une seule base donc on peut prendre le premier
         base = coords[0]
-        path = du.astar(self.map,(i,j),base)
-        self.path = path
-        return self.path
+        self.path = du.astar(self.map,(i,j),base)
+        assert self.path is not None
     
     def get_closest_rescue_path(self):
         coords = du.find_on_map(self.map,du.zone_types.RESCUE.value)
-        if len(coords)==0:
-            return None
-        
+        print("I AM ",self.i,self.j)
+        print("RESCUE COORDS",coords)
+        assert len(coords) > 0
+        rescue = coords[0]
+
         i,j = self.i,self.j
-        # find the path to the closest rescue
-        length = math.inf
-        for rescue in coords:
-            path = du.astar(self.map,(i,j),rescue) # on peut changer pour prendre le premier path non null
-            if path is not None:
-                if len(path) < length:
-                    self.path = path
-        return self.path
-        
+        self.path = du.astar(self.map,(i,j),rescue) # on peut changer pour prendre le premier path non null
+        assert self.path is not None
+        print("path to rescue is",self.path)
+                
     def move_to_next_point_in_path(self):
         # move to next point in path
         if len(self.path) <1:
@@ -120,7 +124,6 @@ class MyCustomDrone(DroneAbstract):
             self.move_to_next_point_in_path() # on rappelle la fonction
         else: # sinon on se déplace en ligne droite
             return self.move_to(next_point[0],next_point[1])
-
 
 
     def move_to(self, target_i,target_j):
@@ -148,12 +151,12 @@ class MyCustomDrone(DroneAbstract):
             target_i,target_j = random.choice(list(zip(targets[0],targets[1])))
             print("trying target ",target_i,target_j)
 
-            self.path = du.astar(self.map,(i,j),(target_i,target_j))
+            self.path = du.astar(self.map,(i,j),(9,2))
             self.target = (target_i,target_j)
 
-    def adjust_compass(self):
+    def adjust_compass(self,target_angle):
         angle = u.rad2deg(self.theta)
-        target_angle = u.rad2deg(math.pi/2)
+        
         if abs(angle-target_angle) <self.epsilon_angle:
             return None
         if angle < target_angle:
@@ -172,17 +175,57 @@ class MyCustomDrone(DroneAbstract):
                 return False
         return True
 
-    def process_semantic(self):
-        print(self.semantic_values())
+    def _angle_dist_to_pos_sem(self,angle,dist):
+        angle = self.theta + angle
+        x = self.x + dist*math.cos(angle)
+        y = self.y + dist*math.sin(angle)
+        return (x,y)
 
+    def _process_semantic(self):
+        res = []
+        semantic_values = self.semantic_values()
+        for (i,semantic) in enumerate(semantic_values):
+            if semantic.entity_type == DroneSemanticSensor.TypeEntity.WOUNDED_PERSON:
+                self.rescue = semantic
+            position = self._angle_dist_to_pos_sem(semantic.angle,semantic.distance)
+            coord = du.coords_to_indexes(position,self.GPS_BOUNDS,self.MAP_SIZE)
+            res.append((semantic.entity_type,coord))
+        return res
 
+    def goto_rescue(self,semantic):
+        if self.move_angle is None:
+            self.move_angle = semantic.angle
+        print(self.move_angle)
+        if self.move_angle > 0.2:
+            print(self.move_angle)
+            self.move_angle -= self.ANGULAR_VELOCITY
+            return {"forward":0,"lateral":0,"rotation":1,"grasper":self.grasper}
+
+        if self.move_angle < -0.2:
+            print(self.move_angle)
+            self.move_angle += self.ANGULAR_VELOCITY
+            return {"forward":0,"lateral":0,"rotation":-1,"grasper":self.grasper}
+        
+        if semantic.distance > 50:
+            return {"forward":1,"lateral":0,"rotation":0,"grasper":self.grasper}
+        self.arrived = True
+        self.move_angle = None  
+        return {"forward":0,"lateral":0,"rotation":0,"grasper":1}    
     def control(self):
+        
+        if "GOTO_RESCUE" in self.states :
+            if not self.arrived:
+                return self.goto_rescue(self.rescue)
+            self.states.remove("GOTO_RESCUE")
+            self.states.append("GOTO_BASE")
+            self.path = None
+            
         self.step_counter += 1
         self.x, self.y = self.measured_gps_position()
         self.i, self.j = du.coords_to_indexes((self.x,self.y),self.GPS_BOUNDS,self.MAP_SIZE)
         self.theta = self.measured_compass_angle()
 
-        adjust_compass = self.adjust_compass()
+        adjust_compass = self.adjust_compass(u.rad2deg(math.pi/2))
         if adjust_compass is not None:
             return adjust_compass
         # apply kalman filter here if needed
@@ -193,30 +236,19 @@ class MyCustomDrone(DroneAbstract):
             print("path not valid anymore")
             self.path = du.astar(self.map,(self.i,self.j),self.target)
 
-        if self.step_counter % 1 == 0:
-            #print(self.map)
-            print(self.semantic_values())
-            #print("i'm at",self.i,self.j)
-            #print("my path is",self.path)
-            #print(np.where(self.map == du.zone_types.WALL.value))
+        if "EXPLORE" in self.states and self.rescue is not None:
+            print("FOUND RESCUE")
+            self.states.append("GOTO_RESCUE")
+            self.states.remove("EXPLORE")
+            self.path = None
         
-        return
-        if "GOTO_RESCUE" in self.states :
-            if self.path is None:
-                self.get_closest_rescue_path()
-            if self.path is not None:
-                if self.arrived:
-                    self.grasper = 1
-                    self.states.remove("GOTO_RESCUE")
-                    self.states.append("GOTO_BASE")
-                    self.path = None
-                else:
-                    return self.move_to_next_point_in_path() # appelé a chaque step de SAVE_RESCUE 
                 
 
         if "GOTO_BASE" in self.states:
             if self.path is None:
-                self.path = self.get_base_path()
+                print("GOING TO BASE")
+                self.get_base_path()
+                
             if self.path is not None:
                 if self.arrived:
                     self.states.remove("GOTO_BASE")

@@ -84,7 +84,6 @@ class MyDroneLidarCommunication(DroneAbstract):
             min_dist = min(values)
             # near_angle_raw : angle with the nearest distance
             near_angle_raw = ray_angles[np.argmin(values)]
-
         far_angle = far_angle_raw
         # If far_angle_raw is small then far_angle = 0
         if abs(far_angle) < 1 / 180 * np.pi:
