@@ -1,7 +1,4 @@
-from solutions.my_drone_custom import MyDroneCustom
-from solutions.my_drone_random import MyDroneRandom
-from solutions.my_drone_lidar_communication import MyDroneLidarCommunication
+from swarm_rescue.solutions.drone_politique import MyCustomDrone
 
-
-class MyDroneEval(MyDroneCustom):
+class MyDroneEval(MyCustomDrone):
     pass
