@@ -1,5 +1,4 @@
-from solutions.my_drone_random import MyDroneRandom
+from swarm_rescue.solutions.drone_politique import MyCustomDrone
 
-
-class MyDroneEval(MyDroneRandom):
+class MyDroneEval(MyCustomDrone):
     pass
