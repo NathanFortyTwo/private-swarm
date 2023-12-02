@@ -9,16 +9,15 @@ from spg_overlay.utils import utils as u
 import time
 from spg_overlay.entities.drone_distance_sensors import DroneSemanticSensor
 import tkinter as tk
-import solutions.minimap as minimap
 import threading
+import solutions.minimap as minimap
+
 """
 Les méthodes qui ne sont PAS appellée par control() sont préfacées par un _
 """
 
+
 class MyCustomDrone(DroneAbstract):
-
-
-
     def __init__(self,
                  identifier: Optional[int] = None,
                  misc_data: Optional[MiscData] = None,
@@ -31,7 +30,7 @@ class MyCustomDrone(DroneAbstract):
 
         self.isTurning = False
         self.GPS_BOUNDS = (-500,500) # TODO trouver un moyen d'avoir ces valeurs
-        self.resolution = 50
+        self.resolution = 200
         self.MAP_SIZE = int(misc_data.size_area[0]/50) # on suppose que c'est un carré
         #TODO supposition a tej des que possible
         self.map = np.zeros([self.MAP_SIZE,self.MAP_SIZE])
@@ -42,7 +41,7 @@ class MyCustomDrone(DroneAbstract):
         self.arrived = False
         self.path = None
         self.epsilon_angle = 5
-        self.DIST_SEUIL_LIDAR = 150
+        self.DIST_SEUIL_LIDAR = 100
         self.x = None
         self.y = None
         self.i = None
@@ -60,6 +59,7 @@ class MyCustomDrone(DroneAbstract):
         self.move_limit = 30*5 # 5 secondes
         self.move_timer = 0
 
+        
         self.tk_display = True
         if self.tk_display:
             threading.Thread(target=self._tk_display).start()
@@ -68,6 +68,7 @@ class MyCustomDrone(DroneAbstract):
         root = tk.Tk()
         app = minimap.MiniMap(root,self.map)
         root.mainloop()
+        
 
     def define_message_for_all(self):
         return {"map":self.map}
@@ -116,22 +117,20 @@ class MyCustomDrone(DroneAbstract):
         assert self.path is not None
     
     def get_closest_rescue_path(self):
-        coords = du.find_on_map(self.map,du.zone_types.RESCUE.value)
+        coords = self._angle_dist_to_pos_sem(self.rescue.angle,self.rescue.distance)
         print("I AM ",self.i,self.j)
         print("RESCUE COORDS",coords)
-        assert len(coords) > 0
-        rescue = coords[0]
-
+        coords = du.coords_to_indexes(coords,self.GPS_BOUNDS,self.MAP_SIZE)
         i,j = self.i,self.j
-        self.path = du.astar(self.map,(i,j),rescue) # on peut changer pour prendre le premier path non null
-        assert self.path is not None
+        self.path = du.astar(self.map,(i,j),coords) # on peut changer pour prendre le premier path non null
+
         print("path to rescue is",self.path)
                 
     def move_to_next_point_in_path(self):
         # move to next point in path
         if len(self.path) <1:
             self.arrived= True
-            return {"forward":0,"lateral":0,"rotation":0,"grasped":self.grasper}
+            return {"forward":0,"lateral":0,"rotation":0,"grasper":self.grasper}
         
         i,j = self.i,self.j
         next_point = self.path[0]
@@ -197,6 +196,12 @@ class MyCustomDrone(DroneAbstract):
         y = self.y + dist*math.sin(angle)
         return (x,y)
 
+    def remove_rescue_from_map(self,map,rescue):
+        coords = self._angle_dist_to_pos_sem(rescue.angle,rescue.distance)
+        coords = du.coords_to_indexes(coords,self.GPS_BOUNDS,self.MAP_SIZE)
+        i,j = coords
+        map[i,j] = du.zone_types.FREE.value
+
     def _process_semantic(self):
         res = []
         semantic_values = self.semantic_values()
@@ -208,34 +213,21 @@ class MyCustomDrone(DroneAbstract):
             res.append((semantic.entity_type,coord))
         return res
 
-    def goto_rescue(self,semantic):
-        if self.move_angle is None:
-            self.move_angle = semantic.angle
-        print(self.move_angle)
-        if self.move_angle > 0.2:
-            print(self.move_angle)
-            self.move_angle -= self.ANGULAR_VELOCITY
-            return {"forward":0,"lateral":0,"rotation":1,"grasper":self.grasper}
-
-        if self.move_angle < -0.2:
-            print(self.move_angle)
-            self.move_angle += self.ANGULAR_VELOCITY
-            return {"forward":0,"lateral":0,"rotation":-1,"grasper":self.grasper}
-        
-        if semantic.distance > 50:
-            return {"forward":1,"lateral":0,"rotation":0,"grasper":self.grasper}
-        self.arrived = True
-        self.move_angle = None  
-        return {"forward":0,"lateral":0,"rotation":0,"grasper":1}    
     def control(self):
         
-        if "GOTO_RESCUE" in self.states :
-            if not self.arrived:
-                return self.goto_rescue(self.rescue)
-            self.states.remove("GOTO_RESCUE")
-            self.states.append("GOTO_BASE")
+        #print(self.states,self.grasper)
+
+        newi,newj = du.coords_to_indexes(self.measured_gps_position(),self.GPS_BOUNDS,self.MAP_SIZE)
+        if (newi,newj) == (self.i,self.j):
+            self.move_timer += 1
+        else:
+            self.move_timer = 0
+
+        if self.move_timer > self.move_limit:
+            print("stuck")
             self.path = None
-            
+            self.move_timer = 0
+
         self.step_counter += 1
         self.x, self.y = self.measured_gps_position()
         self.i, self.j = du.coords_to_indexes((self.x,self.y),self.GPS_BOUNDS,self.MAP_SIZE)
@@ -246,11 +238,32 @@ class MyCustomDrone(DroneAbstract):
             return adjust_compass
         # apply kalman filter here if needed
     
-        self.update_map()
+        if self.lidarr:
+            self.update_map()
 
         if not self.check_still_valid_path():
             print("path not valid anymore")
             self.path = du.astar(self.map,(self.i,self.j),self.target)
+
+        if "GOTO_RESCUE" in self.states and self.grasper == 0:
+            self.lidarr = False
+            if self.path is None: # si on a pas de path on en calcule un
+                print("GOING TO RESCUE")
+                self.get_closest_rescue_path()
+                self.arrived = False
+                assert self.path is not None
+
+            if self.path is not None:
+                if self.arrived:
+                    self.states.remove("GOTO_RESCUE")
+                    self.states.append("GOTO_BASE")
+                    self.path = None
+                    self.grasper = 1
+                    print("GRASPING")
+                    self.remove_rescue_from_map(self.map,self.rescue)
+                    return {"forward":0,"lateral":0,"rotation":0,"grasper":self.grasper}
+                else:
+                    return self.move_to_next_point_in_path()
 
         if "EXPLORE" in self.states and self.rescue is not None:
             print("FOUND RESCUE")
@@ -258,10 +271,10 @@ class MyCustomDrone(DroneAbstract):
             self.states.remove("EXPLORE")
             self.path = None
         
-                
-
         if "GOTO_BASE" in self.states:
+            self.lidarr = True
             if self.path is None:
+                self.arrived = False
                 print("GOING TO BASE")
                 self.get_base_path()
                 
