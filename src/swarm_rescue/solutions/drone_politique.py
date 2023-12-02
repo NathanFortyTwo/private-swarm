@@ -8,12 +8,17 @@ import solutions.drone_utils as du
 from spg_overlay.utils import utils as u
 import time
 from spg_overlay.entities.drone_distance_sensors import DroneSemanticSensor
+import tkinter as tk
+import solutions.minimap as minimap
+import threading
 """
 Les méthodes qui ne sont PAS appellée par control() sont préfacées par un _
 """
 
-
 class MyCustomDrone(DroneAbstract):
+
+
+
     def __init__(self,
                  identifier: Optional[int] = None,
                  misc_data: Optional[MiscData] = None,
@@ -51,7 +56,18 @@ class MyCustomDrone(DroneAbstract):
         print("GPS_BOUNDS : ",self.GPS_BOUNDS)
         print("number_drones : ",misc_data.number_drones)
         print("size_area : ",misc_data.size_area)
+        self.lidarr = True
+        self.move_limit = 30*5 # 5 secondes
+        self.move_timer = 0
+
+        self.tk_display = True
+        if self.tk_display:
+            threading.Thread(target=self._tk_display).start()
         
+    def _tk_display(self):
+        root = tk.Tk()
+        app = minimap.MiniMap(root,self.map)
+        root.mainloop()
 
     def define_message_for_all(self):
         return {"map":self.map}
